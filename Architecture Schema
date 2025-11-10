@@ -1,0 +1,64 @@
+Input: Sequence of features (shape: [batch_size, sequence_length, input_size])
+       + Volatility regime scalar (shape: [batch_size, 1])
+
+│
+├─ Input Projection
+│   ├─ Linear(input_size → hidden_size)
+│   └─ Dropout(0.1)
+│
+├─ Branch 1: Bidirectional LSTM + Volatility-Aware Attention
+│   ├─ LSTM(hidden_size → hidden_size, num_layers=3, bidirectional=True)
+│   └─ Volatility-Aware Attention
+│       ├─ Linear projections: Q, K, V
+│       ├─ Temperature scaling based on volatility
+│       ├─ Multi-head attention (num_heads=8)
+│       └─ Weighted pooling (recent observations weighted higher)
+│
+├─ Branch 2: Multi-Scale Temporal CNN
+│   ├─ TemporalConvBlock 1 (input_size → 128 channels)
+│   │   ├─ Conv1D kernel=3,5,7 → Multi-scale feature extraction
+│   │   ├─ BatchNorm1d
+│   │   ├─ ReLU
+│   │   └─ Dropout(0.2)
+│   ├─ TemporalConvBlock 2 (128 → 256 channels)
+│   └─ AdaptiveMaxPool1d(1) → Output: 256-dim vector
+│
+├─ Branch 3: GRU for Recent Patterns
+│   ├─ GRU(hidden_size → hidden_size, num_layers=3, bidirectional=False)
+│   └─ Take last timestep output → Output: hidden_size vector
+│
+├─ Volatility Regime Encoder
+│   ├─ Linear(1 → 32)
+│   ├─ ReLU
+│   ├─ Linear(32 → 64)
+│   └─ ReLU
+│
+├─ Feature Fusion with Gating
+│   ├─ Concatenate: [LSTM context, CNN output, GRU context, Volatility encoding]
+│   ├─ Linear + Sigmoid → Gate
+│   └─ Element-wise multiplication: gated_features = concatenated * gate
+│
+├─ Feature Combiner
+│   ├─ Linear → hidden_size*2
+│   ├─ LayerNorm
+│   ├─ ReLU
+│   └─ Dropout(0.3)
+│
+├─ Residual Layers
+│   ├─ Residual1: Linear → LayerNorm → ReLU → Dropout
+│   └─ Residual2: Linear → LayerNorm → ReLU → Dropout
+│
+├─ Prediction Heads (5 horizons)
+│   └─ Each head:
+│       ├─ Linear(hidden_size*2 → hidden_size)
+│       ├─ ReLU
+│       ├─ Dropout
+│       ├─ Linear(hidden_size → hidden_size/2)
+│       ├─ ReLU
+│       ├─ Dropout
+│       └─ Linear(hidden_size/2 → 1)
+│
+└─ Volatility Prediction Head
+    ├─ Linear(hidden_size*2 → hidden_size)
+    ├─ ReLU
+    └─ Linear(hidden_size → 5) → Softplus
